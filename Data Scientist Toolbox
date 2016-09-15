@@ -55,8 +55,14 @@ biocLite()
 library(ggplot2)
 search() #check all the functions in the library
 
+#link github with git#
+mkdir ~/test-repo
+cd ~/test-repo
+git init
+git remote add origin http://github.com/isolde1104/test-repo.git
 
-
+create a local copy of the desired repo on your gibhub acct
+git clone http://gibhub.com/isolde1104/repoName.git
 
 
 
