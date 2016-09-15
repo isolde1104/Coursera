@@ -23,3 +23,46 @@ resamples <- matrix(sample(gmVol,n*B,replace = TRUE),B,n)
 medians <- apply(resamples,1,median)
 sd(medians)
 quantile(medians,c(.025,.975))
+
+#CLI Basics#
+#pwd: print working directory (print working dir)#
+clear: clear the screen
+ls: lists files and folders in the current directory
+ls -a: lists hidden and unhidden files and folders
+ls -al:list details of all
+cd /users/grace/applications: change directory
+cd(blank)..: change directory to one level above your current directory
+mkdir Documents: create a new directory called Documents
+touch test_file creates a new file
+cp test_file Documents: take test_file and move it to Documents directory
+cp -r can also be used for copying the contents of directories; cp -r Documents More_docs: copies the contents of Documents into More_docs
+rm test_File: remove test_file from current directory
+rm -r More_doc (be careful, there is no undo) remove the entire directory
+mv new_file Documents: move new_file to Documents directory
+mv new_file renamed_file: rename new_file to renamed_file
+echo Hello World!: print Hello World!
+date: current date
+
+#R tutorial#
+A<-available.packages()
+head(rownames(A),3)
+install.packages(c("ggplot2","devtools"))
+
+install basic packages
+source("http://bioconductor.org/biocLite.R")
+biocLite()
+
+library(ggplot2)
+search() #check all the functions in the library
+
+
+
+
+
+
+
+
+
+
+
+
