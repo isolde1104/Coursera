@@ -1,0 +1,185 @@
+---
+title: "Practical Machine Learning"
+author: "Grace"
+date: "November 16, 2016"
+---
+
+```{r}
+#install.packages("kernlab")
+library(kernlab)
+library(ggplot2)
+library(lattice)
+library(e1071)
+library(caret)
+library(gridExtra)
+data(spam)
+```
+
+```{r}
+plot(density(spam$your[spam$type=="nonspam"]), col="blue", main="",
+     xlab="Frequency of 'your'")
+lines(density(spam$your[spam$type=="spam"]), col="red")
+abline(v=0.5)
+prediction<-ifelse(spam$your > 0.5, "spam","nonspam")
+table(prediction,spam$type)/length(spam$type)
+```
+```{r}
+set.seed(333)
+smallSpam <- spam[sample(nrow(spam),10),]
+spamLabel <- (smallSpam$type=="spam")*1+1
+plot(smallSpam$capitalAve, col=spamLabel)
+```
+```{r}
+rule1 <- function(x){
+  prediction <- rep(NA, length(x))
+  prediction[x > 2.7] <- "spam"
+  prediction[x < 2.4] <- "nonspam"
+  prediction[x >= 2.4 & x<=2.45] <- "spam"
+  prediction[x > 2.45 & x <= 2.7] <- "nonspam"
+  return(prediction)
+}
+rule1(3)
+table(rule1(smallSpam$capitalAve),smallSpam$type)
+```
+
+```{r}
+rule2 <- function(x){
+  prediction <- rep(NA, length(x))
+  prediction[x > 2.8] <- "spam"
+  prediction[x <= 2.8] <- "nonspam"
+  return(prediction)
+}
+table(rule2(smallSpam$capitalAve),smallSpam$type)
+
+table(rule1(spam$capitalAve),spam$type)/nrow(spam)
+table(rule2(spam$capitalAve),spam$type)/nrow(spam)
+sum(rule1(spam$capitalAve)==spam$type)
+sum(rule2(spam$capitalAve)==spam$type)
+```
+
+```{r}
+#install.packages("caret", dependencies = c("Depends", "Suggests"))
+inTrain <- createDataPartition(y=spam$type, p=0.75,list=FALSE)
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+dim(training)
+set.seed(32343)
+modelFit <- train(type~., data=training, method='glm')
+modelFit
+modelFit$finalModel
+predictions <- predict(modelFit, newdata=testing)
+confusionMatrix(predictions,testing$type)
+```
+
+```{r}
+set.seed(32323)
+folds <- createFolds(y=spam$type, k=10, list=TRUE, returnTrain=TRUE)
+sapply(folds,length)
+folds <- createFolds(y=spam$type, k=10, list=TRUE, returnTrain=FALSE)
+sapply(folds,length)
+```
+##Resampling 
+```{r}
+set.seed(32323)
+folds <- createResample(y=spam$type, times=10, list=TRUE)
+folds[[1]][1:10]
+```
+##Time Slides
+```{r}
+set.seed(32323)
+tme <- 1:1000
+folds <- createTimeSlices(y=tme, initialWindow=20, horizon=10)
+names(folds)
+folds$train[[1]]
+folds$test[[1]]
+```
+## Train Options
+```{r}
+args(train.default)
+args(trainControl)
+```
+
+# Ploting Predictors
+```{r}
+library(ISLR)
+data(Wage)
+inTrain<-createDataPartition(y=Wage$wage,p=0.7,list=FALSE)
+training <- Wage[inTrain,]
+testing <- Wage[-inTrain,]
+featurePlot(x=training[,c("age","education","jobclass")],
+            y=training$wage,plot="pairs")
+qplot(age,wage,data=training)
+qplot(age,wage,data=training,color=jobclass)
+```
+
+```{r}
+qplot(age,wage,color=education,data=training)+
+  geom_smooth(method="lm")
+```
+### Cut2, making factors(Hmisc)
+### qplot
+```{r}
+#install.packages("Hmisc")
+library(Hmisc)
+cutWage <- cut2(training$wage, g=4)
+table(cutWage)
+p1<- qplot(cutWage,age,data=training,fill=cutWage,
+      geom="boxplot")
+p2 <- qplot(cutWage,age,data=training,fill=cutWage,
+      geom=c("boxplot","jitter"),alpha=1/50)
+grid.arrange(p1,p2,ncol=2)
+
+t1<-table(cutWage,training$jobclass)
+prop.table(t1,1) 
+#proportion of the table by row-1 (col-2)
+```
+##Density Plots
+```{r}
+qplot(wage,color=education,data=training,
+      geom="density")
+```
+##Make your plots only in the training set
+-Don't use the test set for exploration
+## Things to look for
+1) Imbalance in outcomes/predictors
+2) Outliers
+3) Groups of points not explained by a predictor
+4) Skewed variables (transform to normally distributed)
+
+## Basic Preprocessing
+```{r}
+inTrain <- createDataPartition(y=spam$type, p=.75, list=FALSE)
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+hist(training$capitalAve, main ="",xlab="avg. capital run length")
+trainCapAve <- training$capitalAve
+trainCapAveS<-(trainCapAve-mean(trainCapAve))/sd(trainCapAve)
+mean(trainCapAveS)
+sd(trainCapAveS)
+```
+# Standardizing - test set
+## Should use the same parameters as training set
+```{r}
+testCapAveS <- (testing$capitalAve-mean(trainCapAve))/sd(trainCapAve)
+mean(testCapAveS)
+sd(testCapAveS)
+```
+## Standardizing - preProcess Function
+```{r}
+preobj <- preProcess(training[,-58],method = c("center","scale"))
+trainCapAveS <- predict(preobj, training[,-58])$capitalAve
+mean(trainCapAveS)
+```
+## Apply the same functions from preobj to testing set
+```{r}
+testCapAveS <- predict(preobj, testing[,-58])$capitalAve
+mean(testCapAveS)
+sd(testCapAveS)
+```
+## Standardizing - preProcess argument
+```{r}
+set.seed(32343)
+modelFit <- train(type~.,data=training, preProcess=c("center","scale"),
+                  method = "glm")
+```
+
