@@ -1,0 +1,151 @@
+---
+title: "Practical ML Project"
+author: "Grace"
+date: "12/9/2016"
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+suppressMessages(library(randomForest))
+library(caret)
+library(gbm)
+```
+
+# Introduction to the Project
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+### Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### Goal
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+# Loading data 
+```{r}
+setwd("/Users/Grace/Desktop/Data Science/Practical ML")
+training <- read.csv("pml-training.csv",na.strings=c("NA","","#DIV/0!"))
+testing <- read.csv("pml-testing.csv",na.strings=c("NA","","#DIV/0!"))
+```
+
+Split data into training and testing set
+```{r}
+set.seed(123)
+inTrain <- createDataPartition(training$class,p=.67,list=FALSE)
+train <- training[inTrain,]
+test <- training[-inTrain,]
+dim(train);dim(test)
+```
+Get a sense of the dataset
+```{r}
+dim(train)
+vars <- names(train) %in% c("classe","new_window","user_name")
+sapply(train[vars],summary)
+```
+
+# Data Cleaninig
+Remove Near Zero Variance vars
+  nearZeroVar diagnoses predictors that have 1) one unique value 2)few unique values relative to the number of sample 3) ratio of the frequency of the most common value to the second common value is large
+  Since there are 160 predictors in the sample, it is very necessary to remove variables with poor quality. 
+```{r}
+train <- train[,-1] #remove the first column X
+nzvars <- nearZeroVar(train,saveMetric=TRUE)
+train <- train[,nzvars$nzv==FALSE]
+dim(train)
+```
+Remove columns with over 60% NAs
+```{r}
+M <- sapply(train, function(x) sum(is.na(x))/length(x))
+trainc <-train[names(train)[M<0.6]]
+var <- names(train)[M<0.6]
+
+testc<- test[var] # select the same variables 
+testing <- testing[var[-58]] #select the same variable except classe
+dim(trainc)
+dim(testc)
+dim(testing)
+```
+# Model Fitting
+## Decision Trees
+It is a typical classification problem; therefore, I will start with an easy method, decision trees, to extract important features
+```{r}
+set.seed(123)
+mod.tree <- rpart(classe~.,data=trainc,method="class")
+plot(mod.tree)
+text(mod.tree, use.n=TRUE, all=TRUE, cex=0.8)
+predict.tree<-predict(mod.tree,testc,type="class")
+M.tree <- confusionMatrix(predict.tree,testc$classe)
+M.tree
+accuracy<-M.tree$overall[1]
+plot(M.tree$table,main=paste("Decision Tree with Accurary: ", round(accuracy,4)*100, "%"))
+```
+## Random Forests
+RF prevents overfitting by coercing to consider a subset of variables n each split
+```{r}
+set.seed(123)
+sqrt(ncol(trainc)-1)
+mod.rf <- randomForest(classe~., data=trainc, mtry=7,
+                       keep.forest=TRUE)
+# Usually m, number of variables considered at each split, is the square root of the total number of variables
+varImpPlot(mod.rf,type=2,main="Variance Importance Plot")
+```
+
+```{r}
+predict.rf <- predict(mod.rf,testc,type="class")
+M.rf <- confusionMatrix(predict.rf,testc$classe)
+M.rf
+accuracy<-M.rf$overall[1]
+plot(M.rf$table,main=paste("Random Forests with Accurary: ", round(accuracy,4)*100, "%"))
+```
+
+## Gradient Boosting
+
+```{r}
+set.seed(123)
+ctrl <- trainControl(number=10,repeats=5)
+#The default setting performed 150 interations and took a long time; therefore, I limit the iterations to 10 and use 5 fold CV
+mod.gbm <- train(classe~.,data=trainc, method="gbm",
+                 trControl = ctrl, verbose=FALSE)
+mod.gbm$finalModel
+plot(mod.gbm)
+```
+```{r}
+predict.gbm <- predict(mod.gbm,testc)
+M.gbm <- confusionMatrix(predict.gbm,testc$classe)
+M.gbm
+accuracy<-M.gbm$overall[1]
+plot(M.gbm$table,main=paste("Gradient Boosting with Accurary: ", round(accuracy,4)*100, "%"))
+```
+
+#Predicting on the Test Data
+
+## Predict with Random Forests
+Convert the testing set into the same type as training set
+```{r}
+testing <- rbind(myTraining[2, -58] , testing)
+testing <- testing[-1,]
+```
+I choose random forest here since it is fast and has great predictor power
+```{r}
+yhat <- predict(mod.rf,testing,type="class")
+yhat
+```
+
+## Combining models
+Even though random forests, gradient boosting have high accurary on the testing set, ensembling an odd number of models usually generates the best result; however, it is time-consuming. 
+```{r}
+comb <- data.frame(predict.tree,predict.rf,predict.gbm,
+                   classe=testc$classe)
+comb.mod <- train(classe~.,data=comb,method="rf")
+yhat <- predict(comb.mod,testing,type="class")
+```
+
