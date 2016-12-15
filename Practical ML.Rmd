@@ -12,10 +12,10 @@ library(lattice)
 library(e1071)
 library(caret)
 library(gridExtra)
-data(spam)
 ```
 
 ```{r}
+data(spam)
 plot(density(spam$your[spam$type=="nonspam"]), col="blue", main="",
      xlab="Frequency of 'your'")
 lines(density(spam$your[spam$type=="spam"]), col="red")
@@ -50,7 +50,6 @@ rule2 <- function(x){
   return(prediction)
 }
 table(rule2(smallSpam$capitalAve),smallSpam$type)
-
 table(rule1(spam$capitalAve),spam$type)/nrow(spam)
 table(rule2(spam$capitalAve),spam$type)/nrow(spam)
 sum(rule1(spam$capitalAve)==spam$type)
@@ -179,7 +178,191 @@ sd(testCapAveS)
 ## Standardizing - preProcess argument
 ```{r}
 set.seed(32343)
-modelFit <- train(type~.,data=training, preProcess=c("center","scale"),
-                  method = "glm")
+modelFit <- train(type~.,data=training, preProcess=c("center","scale"),method = "glm")
+modelFit
+```
+
+## Standardizing - Box-Cox transforms
+### to fix heteroscadasticity / skewed data
+```{r}
+preobj <- preProcess(training[,-58],method=c("BoxCox"))
+trainCapAveS <- predict(preobj, training[,-58])$capitalAve
+par(mfrow=c(1,2));hist(trainCapAveS);qqnorm(trainCapAveS)
+par(mfrow=c(1,2));hist(training$capitalAve);qqnorm(training$capitalAve)
+```
+## Standardizing - Imputing data
+```{r}
+set.seed(13343)
+# Make some values NA
+training$capAve <- training$capitalAve
+selectNA <- rbinom(nrow(training),1,0.05)==1
+
+# Impute and standardize
+#install.packages("RANN")
+library(RANN)
+preobj <- preProcess(training[,-58],method="knnImpute")
+capAve <- predict(preobj, training[,-58])$capAve
+
+# Standardize true values
+capAveTruth <- training$capitalAve
+capAveTruth <- (capAveTruth-mean(capAveTruth))/sd(capAveTruth)
+```
+
+```{r}
+# compare imputed value with true value
+quantile(capAve - capAveTruth)
+quantile((capAve - capAveTruth)[selectNA])
+quantile((capAve - capAveTruth)[!selectNA])
+```
+
+# Covariate creation
+### Building new covariates only on training set (o.w. overfitting)
+### New covariates should be added to data frames
+```{r}
+library(ISLR);library(caret);data(Wage)
+inTrain <- createDataPartition(y=Wage$wage, p=.7, list=FALSE)
+training <- Wage[inTrain,];testing <- Wage[-inTrain,]
+```
+
+```{r}
+table(training$jobclass)
+dummies <- dummyVars(wage~jobclass, data=training)
+head(predict(dummies,newdata=training))
+```
+### Removing Zero Covariates
+```{r}
+nsv <- nearZeroVar(training,saveMetrics=TRUE)
+```
+### Spline Basis
+bs function creates a polynomial variable
+```{r}
+#install.packages("splines")
+library(splines)
+bsBasis <- bs(training$age, df=3)
+head(bsBasis)
+lm1<- lm(wage~bsBasis,data=training)
+plot(training$age,training$wage,pch=19,cex=0.5)
+points(training$age,predict(lm1,newdata=training),
+       col='red',pch=19,cex=0.5)
+```
+Splines on the test set
+```{r}
+yhat <- predict(bsBasis,age=testing$age)
+```
+
+## PCA
+```{r}
+library(caret)
+M <- abs(cor(spam[,-58]))
+diag(M)<-0
+which(M>0.8,arr.ind=T)
+spam.sub <- spam[,c(32,34)]
+prcomp <- prcomp(spam.sub)
+prcomp$rotation
+typecolor <- ((spam$type=='spam')*1+1)
+prcomp <- prcomp(log10(spam[,-58]+1)) ##normalize the dataset
+plot(prcomp$x[,1],prcomp$x[,2],col=typecolor,
+     xlab='PC1',ylab='PC2')
+```
+### PCA with caret
+```{r}
+preproc <- preProcess(log10(spam[,-58]+1), method="pca", pcaComp=2)
+spamPC <- predict(preproc, log10(spam[,-58]+1))
+plot(spamPC[,1],spamPC[,2],col=typecolor)
+inTrain <- createDataPartition(spam$type,p=.7,list=FALSE)
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+preProc <- preProcess(log10(training[,-58]+1),method="pca",pcaComp=2)
+trainPC <- predict(preProc, log10(training[,-58]+1))
+modelFit <- train(training$type~.,data=trainPC,method="glm")
+testPC <- predict(preProc, log10(testing[,-58]+1))
+confusionMatrix(testing$type,redict(modelFit, testPC))
+```
+Alternatives - combine PCA first and train model second into one step
+```{r}
+modelFit <- train(training$type~.,method="glm",
+                  preProcess="pca",data=training)
+confusionMatrix(testing$type,predict(modelFit,testing))
+```
+### Final thoughts on PC
+* Most useful for linear-type models
+* Can make it harder to interpret predictors
+* Watch out for outliers
+1) transform first(with logs/Box Cox)
+2) Plot predictors to identify problems
+
+## Predicting with Regression
+```{r}
+data(faithful); set.seed(333)
+inTrain <- createDataPartition(y=faithful$waiting,p=.5,list=FALSE)
+trainFaith <- faithful[inTrain,]; testFaith <- faithful[-inTrain,]
+head(trainFaith)
+ggplot(aes(x=eruptions,y=waiting),data=trainFaith)+
+  geom_point(color="blue",pch=19)+xlab("Eruptions")+ylab("Waiting")
+```
+
+### Quiz 2
+```{r}
+library(AppliedPredictiveModeling)
+data(concrete)
+library(caret)
+set.seed(1000)
+inTrain = createDataPartition(mixtures$CompressiveStrength, p = 3/4)[[1]]
+training = mixtures[ inTrain,]
+testing = mixtures[-inTrain,]
+library(Hmisc)
+training$cutStrength <- cut2(training$CompressiveStrength, g=4)
+qplot(y=inTrain,x=cutStrength,data=training,geom="boxplot")
+qplot(y=inTrain,x=cutStrength,data=training,color=Age)
+```
+Q3
+```{r}
+qplot(x=Superplasticizer,data=training)
+qplot(x=log10(Superplasticizer+1),data=training)
+summary(training$Superplasticizer)
+sum(training$Superplasticizer==0)
+dim(training)
+```
+Q4
+```{r}
+set.seed(3433)
+data(AlzheimerDisease)
+adData = data.frame(diagnosis,predictors)
+inTrain = createDataPartition(adData$diagnosis, p = 3/4)[[1]]
+training = adData[ inTrain,]
+testing = adData[-inTrain,]
+summary(training)
+subset <- names(training)[grep("IL_", names(training))]
+subtrain <- training[,subset]
+subtrain<-subtrain[,-13]
+prcomp <- preProcess(subtrain,method="pca")
+
+names(prcomp)
+head(prcomp$std)
+```
+
+Q4 with prcomp()
+```{r}
+prcomp2 <- prcomp(subtrain)
+summary(prcomp2)
+pcaCharts <- function(x) {
+    x.var <- x$sdev ^ 2
+    x.pvar <- x.var/sum(x.var)
+    print("proportions of variance:")
+    print(x.pvar)
+    
+    par(mfrow=c(2,2))
+    plot(x.pvar,xlab="Principal component", ylab="Proportion of variance explained", ylim=c(0,1), type='b')
+    plot(cumsum(x.pvar),xlab="Principal component", ylab="Cumulative Proportion of variance explained", ylim=c(0,1), type='b')
+    screeplot(x)
+    screeplot(x,type="l")
+    par(mfrow=c(1,1))
+}
+pcaCharts(prcomp2)
+
+#biplot illustrate the use of PCA on the datasets
+dev.off()
+biplot(prcomp2,scale=0,cex=.8)
+# PCA output concentrated more on negative side
 ```
 
