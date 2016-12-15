@@ -81,7 +81,8 @@ It is a typical classification problem; therefore, I will start with an easy met
 set.seed(123)
 mod.tree <- rpart(classe~.,data=trainc,method="class")
 plot(mod.tree)
-text(mod.tree, use.n=TRUE, all=TRUE, cex=0.8)
+text(mod.tree, cex=0.8)
+#text(mod.tree, use.n=TRUE, cex=0.8)
 predict.tree<-predict(mod.tree,testc,type="class")
 M.tree <- confusionMatrix(predict.tree,testc$classe)
 M.tree
@@ -131,7 +132,7 @@ plot(M.gbm$table,main=paste("Gradient Boosting with Accurary: ", round(accuracy,
 ## Predict with Random Forests
 Convert the testing set into the same type as training set
 ```{r}
-testing <- rbind(myTraining[2, -58] , testing)
+testing <- rbind(trainc[2, -58] , testing)
 testing <- testing[-1,]
 ```
 I choose random forest here since it is fast and has great predictor power
@@ -143,9 +144,9 @@ yhat
 ## Combining models
 Even though random forests, gradient boosting have high accurary on the testing set, ensembling an odd number of models usually generates the best result; however, it is time-consuming. 
 ```{r}
-comb <- data.frame(predict.tree,predict.rf,predict.gbm,
-                   classe=testc$classe)
-comb.mod <- train(classe~.,data=comb,method="rf")
-yhat <- predict(comb.mod,testing,type="class")
+#comb <- data.frame(predict.tree,predict.rf,predict.gbm,
+#                   classe=testc$classe)
+#comb.mod <- train(classe~.,data=comb,method="rf")
+#yhat2 <- predict(comb.mod,testing,type="class")
 ```
 
